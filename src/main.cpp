@@ -4,6 +4,8 @@
 #include <WiFi.h>
 #include "secrets.h"
 #include <time.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 // Sleep time in seconds
 // #define SLEEP_TIME 1800 // 30 minutes
@@ -13,6 +15,8 @@
 // RTC memory persists through deep sleep
 RTC_DATA_ATTR int wakeCount = 0;
 RTC_DATA_ATTR int wifiSelected = 0;
+RTC_DATA_ATTR int fetchAqiHour = -1;
+RTC_DATA_ATTR int aqi = -1;
 
 #define BATTERY_ADC A0
 #define ADC_EN 6
@@ -27,9 +31,9 @@ const int BUTTON_KEY0 = 2; // KEY0 - GPIO2
 const int BUTTON_KEY1 = 3; // KEY1 - GPIO3
 const int BUTTON_KEY2 = 5; // KEY2 - GPIO5
 
-bool lastKey0State = HIGH;
-bool lastKey1State = HIGH;
-bool lastKey2State = HIGH;
+// bool lastKey0State = HIGH;
+// bool lastKey1State = HIGH;
+// bool lastKey2State = HIGH;
 
 static float readBatteryVoltage()
 {
@@ -50,6 +54,61 @@ static float readBatteryVoltage()
 
   digitalWrite(ADC_EN, LOW); // Disable ADC voltage divider
   return voltage;
+}
+
+int parseAqiData(const String &json)
+{
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, json);
+  if (error)
+  {
+    Serial.print("JSON deserialization failed: ");
+    Serial.println(error.c_str());
+    return -1;
+  }
+
+  if (doc["status"] == "ok")
+  {
+    int aqi = doc["data"]["aqi"];
+    Serial.printf("Current AQI: %d\n", aqi);
+    return aqi;
+  }
+  else
+  {
+    Serial.println("Failed to get AQI data");
+    return -1;
+  }
+}
+
+int fetchAqiData()
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.println("WiFi not connected");
+    return -1;
+  }
+
+  HTTPClient http;
+  String url = String("https://api.waqi.info/feed/bangkok/?token=") + aqicnToken;
+  http.begin(url);
+  int httpResponseCode = http.GET();
+
+  if (httpResponseCode > 0)
+  {
+    String payload = http.getString();
+    Serial.println("AQI Data fetched.");
+    // Serial.println(payload);
+    int aqi = parseAqiData(payload);
+    http.end();
+    return aqi;
+  }
+  else
+  {
+    Serial.print("Error on HTTP request: ");
+    Serial.println(httpResponseCode);
+    http.end();
+    return -1;
+  }
 }
 
 const long gmtOffset = 25200; // GMT+7 7 * 3600 seconds
@@ -86,9 +145,12 @@ void setup()
 
   // Check button 1 state to determine which WiFi to use
   delay(100); // Allow time for button state to stabilize
-  wifiSelected = (digitalRead(BUTTON_KEY2) == LOW ? 2 : wifiSelected);
-  wifiSelected = (digitalRead(BUTTON_KEY1) == LOW ? 1 : wifiSelected);
-  wifiSelected = (digitalRead(BUTTON_KEY0) == LOW ? 0 : wifiSelected);
+  bool key0State = digitalRead(BUTTON_KEY0);
+  bool key1State = digitalRead(BUTTON_KEY1);
+  bool key2State = digitalRead(BUTTON_KEY2);
+  wifiSelected = (key2State == LOW ? 2 : wifiSelected);
+  wifiSelected = (key1State == LOW ? 1 : wifiSelected);
+  wifiSelected = (key0State == LOW ? 0 : wifiSelected);
 
   switch (wifiSelected)
   {
@@ -100,7 +162,7 @@ void setup()
   case 1:
     Serial.println("Button 1 pressed - Connecting to Enterprise WiFi (WPA2)...");
     // WPA2-Enterprise connection (University WiFi)
-    WiFi.begin(ssid2, WPA2_AUTH_PEAP, NULL, NULL, NULL, user, password2);
+    WiFi.begin(ssid2, WPA2_AUTH_PEAP, user, user, password2);
     break;
   case 2:
     Serial.println("Button 2 pressed - Connecting to Hotspot...");
@@ -121,6 +183,14 @@ void setup()
     Serial.print(".");
     attempt++;
   }
+
+  epaper.begin();
+  epaper.rotation = ROTATION; // Set rotation if needed
+  // Serial.printf("Width: %d, Height: %d\n", epaper.width(), epaper.height());
+
+  // Clear screen (turns white)
+  epaper.fillScreen(TFT_WHITE);
+
   if (WiFi.status() == WL_CONNECTED)
   {
     Serial.println("WiFi connected.");
@@ -140,12 +210,12 @@ void setup()
       char timeStr[10];
       strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
 
-      epaper.begin();
-      epaper.rotation = ROTATION; // Set rotation if needed
-      // Serial.printf("Width: %d, Height: %d\n", epaper.width(), epaper.height());
-
-      // Clear screen (turns white)
-      epaper.fillScreen(TFT_WHITE);
+      int hour = timeinfo.tm_hour;
+      if (fetchAqiHour != hour || aqi == -1)
+      {
+        aqi = fetchAqiData();
+        fetchAqiHour = hour;
+      }
 
       epaper.textsize = 1;
       epaper.textfont = TEXT_FONT;
@@ -153,20 +223,83 @@ void setup()
       epaper.drawString(dateStr, 10, 40, NUM_TEXT_FONTS);
 
       epaper.textsize = 5;
-      epaper.drawRightString(dayStr, 770, 40, TEXT_FONT);
+      epaper.drawRightString(dayStr, 790, 40, TEXT_FONT);
 
       epaper.textsize = 3;
-      epaper.drawCentreString(timeStr, 380, 180, NUM_TEXT_FONTS);
+      epaper.drawCentreString(timeStr, 380, 160, NUM_TEXT_FONTS);
+
+      if (aqi != -1)
+      {
+        char aqiStr[20];
+        sprintf(aqiStr, "AQI: %d", aqi);
+        epaper.textsize = 3;
+        epaper.drawString(aqiStr, 10, 400, TEXT_FONT);
+
+        String aqiLabel;
+        if (aqi <= 12)
+        {
+          aqiLabel = "Good";
+        }
+        else if (aqi <= 36)
+        {
+          aqiLabel = "Moderate";
+        }
+        else if (aqi <= 56)
+        {
+          aqiLabel = "Unhealthy for Sensitive Groups";
+        }
+        else if (aqi <= 151)
+        {
+          aqiLabel = "Unhealthy";
+        }
+        else if (aqi <= 251)
+        {
+          aqiLabel = "Very Unhealthy";
+        }
+        else
+        {
+          aqiLabel = "Hazardous";
+        }
+        epaper.drawString(aqiLabel, 10, 440, TEXT_FONT);
+      }
+      else
+      {
+        epaper.textsize = 2;
+        epaper.drawString("AQI data unavailable", 10, 440, TEXT_FONT);
+      }
 
       char batteryStr[30];
       epaper.textsize = 3;
       sprintf(batteryStr, "Battery: %.2f V", readBatteryVoltage());
-      epaper.drawRightString(batteryStr, 770, 430, TEXT_FONT);
-
-      epaper.update();
-      delay(5000);
+      epaper.drawRightString(batteryStr, 790, 430, TEXT_FONT);
     }
   }
+  else
+  {
+    Serial.println("WiFi connection failed.");
+    epaper.textsize = 5;
+    epaper.drawCentreString("WiFi connection failed.", 390, 160, TEXT_FONT);
+    epaper.textsize = 2;
+    String wifiMethod;
+    switch (wifiSelected)
+    {
+    case 0:
+      wifiMethod = "Home WiFi";
+      break;
+    case 1:
+      wifiMethod = "Enterprise WiFi";
+      break;
+    case 2:
+      wifiMethod = "Hotspot";
+      break;
+    default:
+      wifiMethod = "Home WiFi";
+      break;
+    }
+    epaper.drawCentreString("Method: " + wifiMethod, 380, 220, TEXT_FONT);
+  }
+
+  epaper.update();
 
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
