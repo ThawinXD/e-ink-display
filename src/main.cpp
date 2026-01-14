@@ -1,11 +1,11 @@
 #include "driver.h"
+#include "battery.h"
+#include "aqi.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <WiFi.h>
 #include "secrets.h"
 #include <time.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
 
 // Sleep time in seconds
 // #define SLEEP_TIME 1800 // 30 minutes
@@ -17,10 +17,6 @@ RTC_DATA_ATTR int wakeCount = 0;
 RTC_DATA_ATTR int wifiSelected = 0;
 RTC_DATA_ATTR int fetchAqiHour = -1;
 RTC_DATA_ATTR int aqi = -1;
-
-#define BATTERY_ADC A0
-#define ADC_EN 6
-#define VOLTAGE_DIVIDER_RATIO 2.0 // 100k and 100k resistors
 
 EPaper epaper;
 #define ROTATION 2  // 0-3 rotation values
@@ -34,82 +30,6 @@ const int BUTTON_KEY2 = 5; // KEY2 - GPIO5
 // bool lastKey0State = HIGH;
 // bool lastKey1State = HIGH;
 // bool lastKey2State = HIGH;
-
-static float readBatteryVoltage()
-{
-  digitalWrite(ADC_EN, HIGH); // Enable ADC voltage divider
-  delay(10);                  // Wait for voltage to stabilize
-  int sum = 0;
-  // Read multiple samples for better accuracy
-  for (int i = 0; i < 10; i++)
-  {
-    sum += analogRead(BATTERY_ADC);
-    delay(2);
-  }
-  int adcValue = sum / 10;
-
-  // Calculate actual battery voltage
-  // Formula: voltage = (ADC_value / 4095) * 3.3V * divider_ratio
-  float voltage = (adcValue / 4095.0) * 3.3 * VOLTAGE_DIVIDER_RATIO;
-
-  digitalWrite(ADC_EN, LOW); // Disable ADC voltage divider
-  return voltage;
-}
-
-int parseAqiData(const String &json)
-{
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, json);
-  if (error)
-  {
-    Serial.print("JSON deserialization failed: ");
-    Serial.println(error.c_str());
-    return -1;
-  }
-
-  if (doc["status"] == "ok")
-  {
-    int aqi = doc["data"]["aqi"];
-    Serial.printf("Current AQI: %d\n", aqi);
-    return aqi;
-  }
-  else
-  {
-    Serial.println("Failed to get AQI data");
-    return -1;
-  }
-}
-
-int fetchAqiData()
-{
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    Serial.println("WiFi not connected");
-    return -1;
-  }
-
-  HTTPClient http;
-  String url = String("https://api.waqi.info/feed/bangkok/?token=") + aqicnToken;
-  http.begin(url);
-  int httpResponseCode = http.GET();
-
-  if (httpResponseCode > 0)
-  {
-    String payload = http.getString();
-    Serial.println("AQI Data fetched.");
-    // Serial.println(payload);
-    int aqi = parseAqiData(payload);
-    http.end();
-    return aqi;
-  }
-  else
-  {
-    Serial.print("Error on HTTP request: ");
-    Serial.println(httpResponseCode);
-    http.end();
-    return -1;
-  }
-}
 
 const long gmtOffset = 25200; // GMT+7 7 * 3600 seconds
 const int daylightOffset = 0;
@@ -213,7 +133,7 @@ void setup()
       int hour = timeinfo.tm_hour;
       if (fetchAqiHour != hour || aqi == -1)
       {
-        aqi = fetchAqiData();
+        aqi = fetchAqiDataFromIqair();
         fetchAqiHour = hour;
       }
 
@@ -266,6 +186,7 @@ void setup()
       {
         epaper.textsize = 2;
         epaper.drawString("AQI data unavailable", 10, 440, TEXT_FONT);
+        // wifiSelected = (wifiSelected + 1) % 3;
       }
 
       char batteryStr[30];
