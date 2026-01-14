@@ -132,7 +132,6 @@ void setup()
     Serial.println("WiFi connection failed.");
     epaper.textsize = 5;
     epaper.drawCentreString("WiFi connection failed.", 390, 160, TEXT_FONT);
-    epaper.textsize = 2;
     String wifiMethod;
     switch (wifiSelected)
     {
@@ -149,11 +148,11 @@ void setup()
       wifiMethod = "Home WiFi";
       break;
     }
+    epaper.textsize = 2;
     epaper.drawCentreString("Method: " + wifiMethod, 380, 220, TEXT_FONT);
     retryConnectedWifiCount++;
+    epaper.update();
   }
-
-  epaper.update();
 
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
@@ -164,28 +163,4 @@ void setup()
   esp_deep_sleep_start();
 }
 
-void loop()
-{
-  // float batteryVoltage = readBatteryVoltage();
-  // bool key0State = digitalRead(BUTTON_KEY0);
-  // bool key1State = digitalRead(BUTTON_KEY1);
-  // bool key2State = digitalRead(BUTTON_KEY2);
-
-  // if (key0State != lastKey0State) {
-  //   Serial.printf("KEY0 is %s\n", key0State == LOW ? "Pressed" : "Released");
-  //   lastKey0State = key0State;
-  //   delay(50); // Debounce delay
-  // }
-  // if (key1State != lastKey1State) {
-  //   Serial.printf("KEY1 is %s\n", key1State == LOW ? "Pressed" : "Released");
-  //   lastKey1State = key1State;
-  //   delay(50); // Debounce delay
-  // }
-  // if (key2State != lastKey2State) {
-  //   Serial.printf("KEY2 is %s\n", key2State == LOW ? "Pressed" : "Released");
-  //   lastKey2State = key2State;
-  //   delay(50); // Debounce delay
-  // }
-
-  // delay(10);
-}
+void loop() {}
