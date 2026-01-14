@@ -105,8 +105,9 @@ void ui1()
     {
       aqi = fetchAqiDataFromIqair();
       fetchAqiHour = hour;
-      updateAqiDisplay(aqi);
+      // updateAqiDisplay(aqi);
     }
+    updateAqiDisplay(aqi);
 
     updateTimeDisplay(timeinfo);
 
