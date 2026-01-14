@@ -1,6 +1,7 @@
 #include "driver.h"
 #include "battery.h"
 #include "aqi.h"
+#include "screen_ui1.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <WiFi.h>
@@ -13,10 +14,11 @@
 #define FULL_REFRESH_INTERVAL 48 // Full refresh every 48 wake-ups (24 hours)
 
 // RTC memory persists through deep sleep
-RTC_DATA_ATTR int wakeCount = 0;
+// RTC_DATA_ATTR int wakeCount = 0;
 RTC_DATA_ATTR int wifiSelected = 0;
 RTC_DATA_ATTR int fetchAqiHour = -1;
 RTC_DATA_ATTR int aqi = -1;
+RTC_DATA_ATTR int retryConnectedWifiCount = 0;
 
 EPaper epaper;
 #define ROTATION 2  // 0-3 rotation values
@@ -40,20 +42,20 @@ void setup()
   delay(500);
 
   // Increment wake counter
-  wakeCount++;
-  Serial.printf("Wake count: %d\n", wakeCount);
+  // wakeCount++;
+  // Serial.printf("Wake count: %d\n", wakeCount);
 
   // Determine if full refresh is needed
-  bool needFullRefresh = (wakeCount >= FULL_REFRESH_INTERVAL);
-  if (needFullRefresh)
-  {
-    Serial.println("Full refresh scheduled");
-    wakeCount = 0; // Reset counter
-  }
-  else
-  {
-    Serial.println("Partial refresh scheduled");
-  }
+  // bool needFullRefresh = (wakeCount >= FULL_REFRESH_INTERVAL);
+  // if (needFullRefresh)
+  // {
+  //   Serial.println("Full refresh scheduled");
+  //   wakeCount = 0; // Reset counter
+  // }
+  // else
+  // {
+  //   Serial.println("Partial refresh scheduled");
+  // }
 
   analogReadResolution(12); // 12-bit ADC resolution
   pinMode(BATTERY_ADC, INPUT);
@@ -62,6 +64,13 @@ void setup()
   pinMode(BUTTON_KEY0, INPUT_PULLUP);
   pinMode(BUTTON_KEY1, INPUT_PULLUP);
   pinMode(BUTTON_KEY2, INPUT_PULLUP);
+
+  if (retryConnectedWifiCount >= 3)
+  {
+    // After 3 failed attempts, switch to next WiFi option
+    wifiSelected = (wifiSelected + 1) % 3;
+    retryConnectedWifiCount = 0;
+  }
 
   // Check button 1 state to determine which WiFi to use
   delay(100); // Allow time for button state to stabilize
@@ -114,86 +123,9 @@ void setup()
   if (WiFi.status() == WL_CONNECTED)
   {
     Serial.println("WiFi connected.");
+    retryConnectedWifiCount = 0;
 
-    configTime(gmtOffset, daylightOffset, "pool.ntp.org", "time.navy.mi.th");
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo))
-    {
-      Serial.println(&timeinfo, "Current time: %Y-%m-%d %H:%M:%S");
-
-      char dateStr[15];
-      strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", &timeinfo);
-
-      char dayStr[10];
-      strftime(dayStr, sizeof(dayStr), "%A", &timeinfo);
-
-      char timeStr[10];
-      strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
-
-      int hour = timeinfo.tm_hour;
-      if (fetchAqiHour != hour || aqi == -1)
-      {
-        aqi = fetchAqiDataFromIqair();
-        fetchAqiHour = hour;
-      }
-
-      epaper.textsize = 1;
-      epaper.textfont = TEXT_FONT;
-
-      epaper.drawString(dateStr, 10, 40, NUM_TEXT_FONTS);
-
-      epaper.textsize = 5;
-      epaper.drawRightString(dayStr, 790, 40, TEXT_FONT);
-
-      epaper.textsize = 3;
-      epaper.drawCentreString(timeStr, 380, 160, NUM_TEXT_FONTS);
-
-      if (aqi != -1)
-      {
-        char aqiStr[20];
-        sprintf(aqiStr, "AQI: %d", aqi);
-        epaper.textsize = 3;
-        epaper.drawString(aqiStr, 10, 400, TEXT_FONT);
-
-        String aqiLabel;
-        if (aqi <= 12)
-        {
-          aqiLabel = "Good";
-        }
-        else if (aqi <= 36)
-        {
-          aqiLabel = "Moderate";
-        }
-        else if (aqi <= 56)
-        {
-          aqiLabel = "Unhealthy for Sensitive Groups";
-        }
-        else if (aqi <= 151)
-        {
-          aqiLabel = "Unhealthy";
-        }
-        else if (aqi <= 251)
-        {
-          aqiLabel = "Very Unhealthy";
-        }
-        else
-        {
-          aqiLabel = "Hazardous";
-        }
-        epaper.drawString(aqiLabel, 10, 440, TEXT_FONT);
-      }
-      else
-      {
-        epaper.textsize = 2;
-        epaper.drawString("AQI data unavailable", 10, 440, TEXT_FONT);
-        // wifiSelected = (wifiSelected + 1) % 3;
-      }
-
-      char batteryStr[30];
-      epaper.textsize = 3;
-      sprintf(batteryStr, "Battery: %.2f V", readBatteryVoltage());
-      epaper.drawRightString(batteryStr, 790, 430, TEXT_FONT);
-    }
+    ui1();
   }
   else
   {
@@ -218,6 +150,7 @@ void setup()
       break;
     }
     epaper.drawCentreString("Method: " + wifiMethod, 380, 220, TEXT_FONT);
+    retryConnectedWifiCount++;
   }
 
   epaper.update();
@@ -253,14 +186,6 @@ void loop()
   //   lastKey2State = key2State;
   //   delay(50); // Debounce delay
   // }
-
-  // Serial.printf("Battery Voltage: %.2f V\n", batteryVoltage);
-  // Serial.println("Test loop.");
-  // delay(1000);
-  // Serial.println("Test loop..");
-  // delay(1000);
-  // Serial.println("Test loop...");
-  // delay(1000);
 
   // delay(10);
 }
