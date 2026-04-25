@@ -1,23 +1,24 @@
 #include "driver.h"
 #include "battery.h"
-#include "aqi.h"
+#include "api.h"
 #include "screen_ui1.h"
+#include "screen_ui2.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <WiFi.h>
 #include "secrets.h"
 #include <time.h>
+#include <esp_wifi.h>
+#include <esp_wpa2.h>
 
 // Sleep time in seconds
 // #define SLEEP_TIME 1800 // 30 minutes
-#define SLEEP_TIME 300           // 5 minutes
+#define SLEEP_TIME 900           // 15 minutes
 #define FULL_REFRESH_INTERVAL 48 // Full refresh every 48 wake-ups (24 hours)
 
 // RTC memory persists through deep sleep
 // RTC_DATA_ATTR int wakeCount = 0;
 RTC_DATA_ATTR int wifiSelected = 0;
-RTC_DATA_ATTR int fetchAqiHour = -1;
-RTC_DATA_ATTR int aqi = -1;
 RTC_DATA_ATTR int retryConnectedWifiCount = 0;
 
 EPaper epaper;
@@ -40,22 +41,6 @@ void setup()
 {
   Serial.begin(115200);
   delay(500);
-
-  // Increment wake counter
-  // wakeCount++;
-  // Serial.printf("Wake count: %d\n", wakeCount);
-
-  // Determine if full refresh is needed
-  // bool needFullRefresh = (wakeCount >= FULL_REFRESH_INTERVAL);
-  // if (needFullRefresh)
-  // {
-  //   Serial.println("Full refresh scheduled");
-  //   wakeCount = 0; // Reset counter
-  // }
-  // else
-  // {
-  //   Serial.println("Partial refresh scheduled");
-  // }
 
   analogReadResolution(12); // 12-bit ADC resolution
   pinMode(BATTERY_ADC, INPUT);
@@ -89,9 +74,15 @@ void setup()
     WiFi.begin(ssid1, password1);
     break;
   case 1:
-    Serial.println("Button 1 pressed - Connecting to Enterprise WiFi (WPA2)...");
-    // WPA2-Enterprise connection (University WiFi)
-    WiFi.begin(ssid2, WPA2_AUTH_PEAP, user, user, password2);
+    Serial.println("Button 1 pressed - Connecting to ChulaWiFi Enterprise (PEAP)...");
+    // WPA2-Enterprise connection using esp_wpa2 for better control
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_STA);
+    esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)user, strlen(user));
+    esp_wifi_sta_wpa2_ent_set_username((uint8_t *)user, strlen(user));
+    esp_wifi_sta_wpa2_ent_set_password((uint8_t *)password2, strlen(password2));
+    esp_wifi_sta_wpa2_ent_enable();
+    WiFi.begin(ssid2);
     break;
   case 2:
     Serial.println("Button 2 pressed - Connecting to Hotspot...");
@@ -106,6 +97,7 @@ void setup()
   }
 
   int attempt = 0;
+
   while (WiFi.status() != WL_CONNECTED && attempt < 20)
   {
     delay(500);
@@ -115,17 +107,28 @@ void setup()
 
   epaper.begin();
   epaper.rotation = ROTATION; // Set rotation if needed
-  // Serial.printf("Width: %d, Height: %d\n", epaper.width(), epaper.height());
 
   // Clear screen (turns white)
   epaper.fillScreen(TFT_WHITE);
 
-  if (WiFi.status() == WL_CONNECTED)
+  int currMinute = -1;
+  int currSecond = 0;
+
+  bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+
+  if (wifiConnected)
   {
     Serial.println("WiFi connected.");
     retryConnectedWifiCount = 0;
-
-    ui1();
+    configTime(gmtOffset, daylightOffset, "pool.ntp.org", "time.navy.mi.th");
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo))
+    {
+      currMinute = timeinfo.tm_min;
+      currSecond = timeinfo.tm_sec;
+      // ui1(timeinfo, wifiConnected);
+      ui2(timeinfo, wifiConnected);
+    }
   }
   else
   {
@@ -139,7 +142,7 @@ void setup()
       wifiMethod = "Home WiFi";
       break;
     case 1:
-      wifiMethod = "Enterprise WiFi";
+      wifiMethod = "ChulaWiFi (Enterprise)";
       break;
     case 2:
       wifiMethod = "Hotspot";
@@ -150,6 +153,11 @@ void setup()
     }
     epaper.textsize = 2;
     epaper.drawCentreString("Method: " + wifiMethod, 380, 220, TEXT_FONT);
+
+    // Display WiFi status code for debugging
+    int wifiStatus = WiFi.status();
+    epaper.drawCentreString("Status: " + String(wifiStatus), 380, 250, 1);
+
     retryConnectedWifiCount++;
     epaper.update();
   }
@@ -157,8 +165,19 @@ void setup()
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
 
-  Serial.println("Entering deep sleep...");
-  esp_sleep_enable_timer_wakeup(SLEEP_TIME * 1000000ULL);
+  // Serial.println("Entering deep sleep...");
+  uint64_t sleepDuration = SLEEP_TIME * 1000000ULL; // Fallback when time is unavailable
+  if (currMinute != -1)
+  {
+    int minutesToNextDivBy5 = (5 - (currMinute % 5)) % 5;
+    int secondsToWake = (minutesToNextDivBy5 * 60) - currSecond;
+    if (secondsToWake <= 0)
+    {
+      secondsToWake += 5 * 60;
+    }
+    sleepDuration = (uint64_t)secondsToWake * 1000000ULL;
+  }
+  esp_sleep_enable_timer_wakeup(sleepDuration);
   esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_KEY0, 0); // Wake up on KEY0 (GPIO2) low
   esp_deep_sleep_start();
 }

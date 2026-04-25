@@ -1,15 +1,14 @@
 #include "screen_ui1.h"
 #include "battery.h"
-#include "aqi.h"
+#include "api.h"
 #include <time.h>
 
 #define TEXT_FONT 1
 #define NUM_TEXT_FONTS 7
 
 RTC_DATA_ATTR int dateDay = -1;
-
-const long gmtOffset = 25200; // GMT+7 7 * 3600 seconds
-const int daylightOffset = 0;
+RTC_DATA_ATTR int fetchAqi = -1;
+RTC_DATA_ATTR int aqi = -1;
 
 void updateDateDisplay(const struct tm &timeinfo)
 {
@@ -92,36 +91,30 @@ void updateBatteryDisplay()
   // epaper.updataPartial(790 - epaper.textWidth(batteryStr, TEXT_FONT), 430, epaper.textWidth(batteryStr, TEXT_FONT), 40);
 };
 
-void ui1()
+void ui1(const struct tm &timeinfo, bool wifiConnected)
 {
-  configTime(gmtOffset, daylightOffset, "pool.ntp.org", "time.navy.mi.th");
-  struct tm timeinfo;
-  if (getLocalTime(&timeinfo))
+  int minute = timeinfo.tm_min;
+  int minutesSinceFetch = (minute - fetchAqi + 60) % 60;
+  if (minutesSinceFetch >= 20 || aqi == -1)
   {
-    Serial.println(&timeinfo, "Current time: %Y-%m-%d %H:%M:%S");
-
-    int hour = timeinfo.tm_hour;
-    if (fetchAqiHour != hour || aqi == -1)
-    {
-      aqi = fetchAqiDataFromIqair();
-      fetchAqiHour = hour;
-      // updateAqiDisplay(aqi);
-    }
-    updateAqiDisplay(aqi);
-
-    updateTimeDisplay(timeinfo);
-
-    // if (dateDay != timeinfo.tm_mday)
-    // {
-    //   dateDay = timeinfo.tm_mday;
-    //   updateDateDisplay(timeinfo);
-    //   updateDayDisplay(timeinfo);
-    // }
-    updateDateDisplay(timeinfo);
-    updateDayDisplay(timeinfo);
-
-    updateBatteryDisplay();
-
-    epaper.update();
+    aqi = fetchAqiDataFromIqair();
+    fetchAqi = minute;
+    // updateAqiDisplay(aqi);
   }
+  updateAqiDisplay(aqi);
+
+  updateTimeDisplay(timeinfo);
+
+  // if (dateDay != timeinfo.tm_mday)
+  // {
+  //   dateDay = timeinfo.tm_mday;
+  //   updateDateDisplay(timeinfo);
+  //   updateDayDisplay(timeinfo);
+  // }
+  updateDateDisplay(timeinfo);
+  updateDayDisplay(timeinfo);
+
+  updateBatteryDisplay();
+
+  epaper.update();
 }
