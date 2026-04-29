@@ -1,7 +1,7 @@
 #include "driver.h"
 #include "battery.h"
 #include "api.h"
-#include "screen_ui1.h"
+// #include "screen_ui1.h"
 #include "screen_ui2.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
@@ -20,6 +20,7 @@
 // RTC_DATA_ATTR int wakeCount = 0;
 RTC_DATA_ATTR int wifiSelected = 0;
 RTC_DATA_ATTR int retryConnectedWifiCount = 0;
+RTC_DATA_ATTR bool wifiConnectedOnce = false;
 
 EPaper epaper;
 #define ROTATION 2  // 0-3 rotation values
@@ -127,8 +128,18 @@ void setup()
       currMinute = timeinfo.tm_min;
       currSecond = timeinfo.tm_sec;
       // ui1(timeinfo, wifiConnected);
+      // delay(10000);
       ui2(timeinfo, wifiConnected);
     }
+  }
+  else if(wifiConnectedOnce)
+  {
+    Serial.println("WiFi connection lost. Displaying last known data.");
+    struct tm timeinfo;
+    ui2(timeinfo, wifiConnected);
+
+    epaper.textsize = 1;
+    epaper.drawCentreString("WiFi connection lost.", 400, 420, TEXT_FONT);
   }
   else
   {
@@ -169,11 +180,10 @@ void setup()
   uint64_t sleepDuration = SLEEP_TIME * 1000000ULL; // Fallback when time is unavailable
   if (currMinute != -1)
   {
-    int minutesToNextDivBy5 = (5 - (currMinute % 5)) % 5;
-    int secondsToWake = (minutesToNextDivBy5 * 60) - currSecond;
-    if (secondsToWake <= 0)
-    {
-      secondsToWake += 5 * 60;
+    int minutes = (SLEEP_TIME / 60) - currMinute % (SLEEP_TIME / 60);
+    int secondsToWake = (minutes * 60) - currSecond;
+    if (secondsToWake <= 0) {
+      secondsToWake += SLEEP_TIME;
     }
     sleepDuration = (uint64_t)secondsToWake * 1000000ULL;
   }

@@ -135,7 +135,7 @@ forecasthourly fetchWeatherForecast()
   }
 
   HTTPClient http;
-  String url = String("http://api.weatherapi.com/v1/forecast.json?key=") + weatherApiKey + String("&q=") + latlon + String("&days=1");
+  String url = String("http://api.weatherapi.com/v1/forecast.json?key=") + weatherApiKey + String("&q=") + latlon + String("&days=2");
   http.begin(url);
   int httpResponseCode = http.GET();
 
@@ -154,12 +154,22 @@ forecasthourly fetchWeatherForecast()
       return forecast;
     }
     JsonArray hourly = doc["forecast"]["forecastday"][0]["hour"].as<JsonArray>();
-    for (size_t i = 0; i < hourly.size() && i < 36; i++)
+    JsonArray nextHourly = doc["forecast"]["forecastday"][1]["hour"].as<JsonArray>();
+    for (size_t i = 0; i < hourly.size() && i < 24; i++)
     {
       forecast.hour[i] = hourly[i]["time"].as<String>().substring(11, 13).toInt();
       forecast.tempC[i] = hourly[i]["temp_c"].as<float>();
       forecast.humidity[i] = hourly[i]["humidity"].as<int>();
       forecast.rainChance[i] = hourly[i]["chance_of_rain"].as<int>();
+      // printf("Hour: %d, Temp: %.1f C, Humidity: %d%%, Rain Chance: %d%%\n", forecast.hour[i], forecast.tempC[i], forecast.humidity[i], forecast.rainChance[i]);
+    }
+    for (size_t i = 0; i < nextHourly.size() && i < 12; i++)
+    {
+      forecast.hour[24 + i] = nextHourly[i]["time"].as<String>().substring(11, 13).toInt();
+      forecast.tempC[24 + i] = nextHourly[i]["temp_c"].as<float>();
+      forecast.humidity[24 + i] = nextHourly[i]["humidity"].as<int>();
+      forecast.rainChance[24 + i] = nextHourly[i]["chance_of_rain"].as<int>();
+      // printf("Hour: %d, Temp: %.1f C, Humidity: %d%%, Rain Chance: %d%%\n", forecast.hour[24 + i], forecast.tempC[24 + i], forecast.humidity[24 + i], forecast.rainChance[24 + i]);
     }
 
     http.end();

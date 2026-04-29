@@ -1,5 +1,5 @@
-#ifndef SCREEN_UI1_H
-#define SCREEN_UI1_H
+#ifndef SCREEN_UI2_H
+#define SCREEN_UI2_H
 
 #include <Arduino.h>
 #include "driver.h"
@@ -9,6 +9,6 @@
 // External references to variables from main
 extern EPaper epaper;
 
-void ui1(const struct tm &timeinfo, bool wifiConnected);
+void ui2(const struct tm &timeinfo, const bool &wifiConnected);
 
-#endif // SCREEN_UI1_H
+#endif // SCREEN_UI2_H

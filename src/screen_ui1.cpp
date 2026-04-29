@@ -6,11 +6,11 @@
 #define TEXT_FONT 1
 #define NUM_TEXT_FONTS 7
 
-RTC_DATA_ATTR int dateDay = -1;
-RTC_DATA_ATTR int fetchAqi = -1;
-RTC_DATA_ATTR int aqi = -1;
+static RTC_DATA_ATTR int dateDay = -1;
+static RTC_DATA_ATTR int fetchAqi = -1;
+static RTC_DATA_ATTR int aqi = -1;
 
-void updateDateDisplay(const struct tm &timeinfo)
+static void updateDateDisplay(const struct tm &timeinfo)
 {
   char dateStr[15];
   strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", &timeinfo);
@@ -19,7 +19,7 @@ void updateDateDisplay(const struct tm &timeinfo)
   // epaper.updataPartial(10, 40, 200, 40);
 };
 
-void updateDayDisplay(const struct tm &timeinfo)
+static void updateDayDisplay(const struct tm &timeinfo)
 {
   char dayStr[10];
   strftime(dayStr, sizeof(dayStr), "%A", &timeinfo);
@@ -28,7 +28,7 @@ void updateDayDisplay(const struct tm &timeinfo)
   // epaper.updataPartial(790 - epaper.textWidth(dayStr, TEXT_FONT), 40, epaper.textWidth(dayStr, TEXT_FONT), 60);
 };
 
-void updateTimeDisplay(const struct tm &timeinfo)
+static void updateTimeDisplay(const struct tm &timeinfo)
 {
   char timeStr[10];
   strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
@@ -37,7 +37,7 @@ void updateTimeDisplay(const struct tm &timeinfo)
   // epaper.updataPartial(380 - epaper.textWidth(timeStr, NUM_TEXT_FONTS) / 2, 160, epaper.textWidth(timeStr, NUM_TEXT_FONTS), 200);
 };
 
-void updateAqiDisplay(const int &aqi)
+static void updateAqiDisplay(const int &aqi)
 {
   if (aqi != -1)
   {
@@ -82,7 +82,7 @@ void updateAqiDisplay(const int &aqi)
   // epaper.updataPartial(10, 400, 300, 80);
 };
 
-void updateBatteryDisplay()
+static void updateBatteryDisplay()
 {
   char batteryStr[30];
   epaper.textsize = 3;
