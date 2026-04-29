@@ -98,7 +98,7 @@ static void updateWeatherDisplay(const forecasthourly &forecast, int currentHour
 {
   Serial.println("Updating weather display...");
   Serial.printf("Current hour: %d\n", currentHour);
-  int idxHour = (currentHour >= 7 && currentHour <= 18)? 7: 19; // Show 7 AM forecast during the day, 7 PM forecast at night
+  int idxHour = (currentHour >= 7 && currentHour <= 18)? 7: (currentHour >= 0 && currentHour < 7)? 0 : 19;
 
   // first range from this day 07 08 09 10 11 12 13 14 15 16 17 18
   // second range from this day 19 20 21 22 23 next day 00 01 02 03 04 05 06
@@ -106,11 +106,12 @@ static void updateWeatherDisplay(const forecasthourly &forecast, int currentHour
   
   float indent = 133.33;
   int i = 0;
-  for(int j = 0; j <= 12; j++, i++) {
-    int shift = (j > 6) ? 168 : 0; // Shift ui
-    if (j == 7) i = 0;
-    if (forecast.hour[idxHour] == -1 || (currentHour >= 0 && currentHour < 7)) {
-      idxHour++;
+  for(int j = 0; j <= 11; j++, i++) {
+    int shift = (j > 5) ? 168 : 0; // Shift ui
+    if (j == 6) i = 0;
+    if (forecast.hour[idxHour] == -1 || (currentHour >= 0 && currentHour < 7 && idxHour < 0)) {
+      idxHour = (idxHour + 1) % 24; // Move to the next hour, wrap around at 24
+      // Serial.println("HERE" + String(idxHour));
       continue; // Skip if data is unavailable
     }
 
@@ -151,6 +152,7 @@ static void updateWeatherDisplay(const forecasthourly &forecast, int currentHour
     epaper.drawRightString(humidityStr, 10 + indent * (i + 1) - 20, 205 + shift, TEXT_FONT);
 
     idxHour = (idxHour + 1) % 24; // Move to the next hour, wrap around at 24
+    // Serial.println("here" + String(idxHour) + " " + String(j) + " " + String(i));
   }
 };
 
