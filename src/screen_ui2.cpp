@@ -110,7 +110,7 @@ static void updateWeatherDisplay(const forecasthourly &forecast, int currentHour
     int shift = (j > 5) ? 168 : 0; // Shift ui
     if (j == 6) i = 0;
     if (forecast.hour[idxHour] == -1 || (currentHour >= 0 && currentHour < 7 && idxHour < 0)) {
-      idxHour = (idxHour + 1) % 24; // Move to the next hour, wrap around at 24
+      idxHour = (idxHour + 1) % 36; // Move to the next hour, wrap around at 36
       // Serial.println("HERE" + String(idxHour));
       continue; // Skip if data is unavailable
     }
@@ -151,7 +151,7 @@ static void updateWeatherDisplay(const forecasthourly &forecast, int currentHour
     epaper.drawRightString(rainChanceStr, 10 + indent * (i + 1) - 20, 170 + shift, TEXT_FONT);
     epaper.drawRightString(humidityStr, 10 + indent * (i + 1) - 20, 205 + shift, TEXT_FONT);
 
-    idxHour = (idxHour + 1) % 24; // Move to the next hour, wrap around at 24
+    idxHour = (idxHour + 1) % 36; // Move to the next hour, wrap around at 36
     // Serial.println("here" + String(idxHour) + " " + String(j) + " " + String(i));
   }
 };
